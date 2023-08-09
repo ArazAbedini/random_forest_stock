@@ -1,6 +1,7 @@
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
+import matplotlib.pyplot as plt
 from numpy import diff
 import pandas as pd
 import utility as ut
@@ -66,5 +67,6 @@ if __name__ == '__main__':
     #          markersize=12)
     # plt.xticks(rotation=90)
     # plt.show()
-
+    plt.plot(date, price)
+    plt.show()
     # print(df.head())
