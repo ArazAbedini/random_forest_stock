@@ -128,18 +128,19 @@ def plot_data_frame(x_axis, y_axis):
 
 
 if __name__ == '__main__':
-    df = pd.read_csv(r'/home/araz-abedini-bakhshmand/Documents/ai/random forest/test.csv', header=None)
+    #df = pd.read_csv(r'/home/araz-abedini-bakhshmand/Documents/ai/test/XAUUSD_candlestick_1D.json', header=None)
+    df = pd.read_json(r'/home/araz-abedini-bakhshmand/Documents/ai/test/XAUUSD_candlestick_1D.json',convert_dates=True)
     utility = ut.Utility()
-    df = utility.title_label(df)
-    df = utility.delete_char(df, 'change')
-    df = utility.delete_char(df, 'volume')
-    df = utility.change_type(data_frame=df)
-    df = df.loc[::-1].reset_index(drop=True)
-    price = utility.make_list(df, 'close')
-    date_list = utility.make_list(df, 'date')
+    # df = utility.title_label(df)
+    # df = utility.delete_char(df, 'change')
+    # df = utility.delete_char(df, 'volume')
+    # df = utility.change_type(data_frame=df)
+
+    price = utility.make_list(df, 'Close')
+    #date_list = utility.make_list(df, 'date')
     df = utility.alma_calculator(data_frame=df)
     diff_price = diff(price)
-    df = df.iloc[1:]
+    df = df[1:]
     df['Price Change'] = diff_price
     period_length = 14
     df['Gain'] = np.where(df['Price Change'] > 0, df['Price Change'], 0)
@@ -148,15 +149,14 @@ if __name__ == '__main__':
     df['Avg Loss'] = df['Loss'].rolling(window=period_length).mean()
     df['RS'] = df['Avg Gain'] / df['Avg Loss']
     df['RSI'] = 100 - (100 / (1 + df['RS']))
-    change = utility.make_list(df, 'change')
-    change = list(map(float, change))
-    price = list(map(float, price))
-    df['close'] = df['close'].astype('float')
     diff = diff(price)
     tag_list = []
     diff_list = []
-    utility.remove_date(df, utility)
+    date_list = utility.make_list(df, 'Open Time')
+    price = price[1:]
     tag = t.Tag(price)
+    df.drop('Open Time', inplace=True, axis=1)
+    date_list = list(map(str, date_list))
     rsi = utility.make_list(df, 'alma')
     tag_list = tag.tag_peak()
     tag_list = tag_list[1:]
@@ -176,11 +176,10 @@ if __name__ == '__main__':
     X = df.drop(['tag', 'open', 'high', 'low'], axis=1)
     y = df['tag']
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, shuffle=False)
-    #rfc = RandomForestClassifier(n_estimators=100, random_state=42)
-    #rfc.fit(X_train, y_train)
-    #with open('/home/araz-abedini-bakhshmand/Documents/ai/random forest/model/random_forest.obj', 'wb') as f:
+    rfc = RandomForestClassifier(n_estimators=100, random_state=42)
+    rfc.fit(X_train, y_train)
+    # with open('/home/araz-abedini-bakhshmand/Documents/ai/random forest/model/random_forest.obj', 'wb') as f:
     #   pickle.dump(rfc, f)
-    print(X.info())
     with open('/home/araz-abedini-bakhshmand/Documents/ai/random forest/model/random_forest.obj', 'rb') as f:
         rfc = pickle.load(f)
     y_pred = rfc.predict(X_test)

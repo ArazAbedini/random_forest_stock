@@ -70,6 +70,6 @@ class Utility:
 
     @staticmethod
     def alma_calculator(data_frame):
-        alma_indicator = ALMAIndicator(close=data_frame['close'])
+        alma_indicator = ALMAIndicator(close=data_frame['Close'])
         data_frame['alma'] = alma_indicator.alma()
         return data_frame
