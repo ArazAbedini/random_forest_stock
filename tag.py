@@ -1,46 +1,29 @@
+from scipy import signal
+
+
 class Tag:
-    def __init__(self, historical_changes):
-        self.historical_changes = historical_changes
+    def __init__(self, y_axis):
+        self.y_axis = y_axis
 
-    def positive_number(self):
-        if all(i < j for i, j in zip(self.historical_changes, self.historical_changes[1:])):
-            res = True
-        elif all(i > j for i, j in zip(self.historical_changes, self.historical_changes[1:])):
-            res = False if self.historical_changes[2] < 0.5 else True
+    def tag_peak(self):
+        """
+        maximum value are tagged as False and minimum are tagged True
+        """
+        main_peaks, _ = signal.find_peaks(x=self.y_axis)
+        negated_list = [-x for x in self.y_axis]
+        main_valley, _ = signal.find_peaks(x=negated_list)
+        tag_list = []
+        if main_peaks[0] > main_valley[0]:
+            non_extremum = False
         else:
-            res = True
-        return res
-
-    def negative_number(self):
-        if all(i > j for i, j in zip(self.historical_changes, self.historical_changes[1:])):
-            res = False
-        elif all(i < j for i, j in zip(self.historical_changes, self.historical_changes[1:])):
-            res = True if abs(self.historical_changes[2]) < 0.5 else False
-        else:
-            res = False
-        return res
-
-    def complicated_number(self):
-        if self.historical_changes[0] > 0:
-            if self.historical_changes[1] < 0:
-                res = True if self.historical_changes[2] > 0 else False
+            non_extremum = True
+        for i in range(len(self.y_axis)):
+            if i in main_peaks:
+                tag_list.append(False)
+                non_extremum = False
+            elif i in main_valley:
+                tag_list.append(True)
+                non_extremum = True
             else:
-                res = False if abs(self.historical_changes[1]) < 0.5 else True
-        else:
-            if self.historical_changes[1] > 0:
-                res = True if self.historical_changes[2] > 0 else False
-            else:
-                res = True if abs(self.historical_changes[1]) < 0.5 else False
-        return res
-
-    def tag_point(self):
-        res = all(i > 0 and j > 0 for i, j in
-                  zip(self.historical_changes,
-                      self.historical_changes[1:]))  # res = True if it means that we have to buy
-        if res:
-            res = self.positive_number()
-        elif all(i < 0 and j < 0 for i, j in zip(self.historical_changes, self.historical_changes[1:])):
-            res = self.negative_number()
-        else:
-            res = self.complicated_number()
-        return res
+                tag_list.append(non_extremum)
+        return tag_list

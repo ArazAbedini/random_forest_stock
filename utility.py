@@ -1,3 +1,6 @@
+from AlmaIndicator import ALMAIndicator
+
+
 class Utility:
     def __init__(self):
         pass
@@ -23,7 +26,7 @@ class Utility:
     @staticmethod
     def title_label(data_frame):
         data_frame = data_frame.iloc[1:]
-        col_names = ['date', 'open', 'high', 'low', 'close', 'volume', 'change']
+        col_names = ['date', 'close', 'open', 'high', 'low', 'volume', 'change']
         data_frame.columns = col_names
         return data_frame
 
@@ -52,3 +55,21 @@ class Utility:
                     temp = list[i]
 
         return tag_list
+
+
+    @staticmethod
+    def change_type(data_frame):
+        data_frame['close'] = data_frame['close'].astype('float')
+        data_frame['open'] = data_frame['open'].astype('float')
+        data_frame['high'] = data_frame['high'].astype('float')
+        data_frame['low'] = data_frame['low'].astype('float')
+        data_frame['volume'] = data_frame['volume'].astype('float')
+        data_frame['change'] = data_frame['change'].astype('float')
+        return data_frame
+
+
+    @staticmethod
+    def alma_calculator(data_frame):
+        alma_indicator = ALMAIndicator(close=data_frame['close'])
+        data_frame['alma'] = alma_indicator.alma()
+        return data_frame

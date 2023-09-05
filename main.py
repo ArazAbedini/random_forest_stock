@@ -13,7 +13,6 @@ import tag as t
 # True mean buy
 
 if __name__ == '__main__':
-
     df = pd.read_csv(r'/home/araz-abedini-bakhshmand/Documents/ai/random forest/AAPL Historical Data.csv', header=None)
     df = df.iloc[1:]
     col_names = ['date', 'open', 'high', 'low', 'close', 'volume', 'change']
