@@ -1,21 +1,44 @@
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
 from AlmaIndicator import ALMAIndicator
+from sklearn import preprocessing
 import matplotlib.pyplot as plt
 from scipy import signal
 from numpy import diff
+import seaborn as sns
+import risk_to_reward
 import win_rate as wr
 import utility as ut
+import win_rate_test
 import pandas as pd
 import numpy as np
 import xlsxwriter
 import tag as t
 import pickle
+import limit
 
 
 
-
+def ploting(date_list,price, tag_list):
+    colors = []
+    for index in tag_list:
+        if index == 'B':
+            colors.append('green')
+        elif index == 'S':
+            colors.append('red')
+        elif index == 'S/B':
+            colors.append('orange')
+        else:
+            colors.append('black')
+    plt.plot(date_list, price)
+    plt.scatter(date_list, price, c=colors)
+    plt.xticks(rotation=90)
+    plt.xlabel('X')
+    plt.ylabel('Y')
+    plt.title('total labeling')
+    plt.show()
 def top_max_peaks(smooth_peaks, y_axis):
 
     start_point = 0
@@ -51,10 +74,7 @@ def top_min_peaks(smooth_peaks, y_axis):
 def plot_data_frame(x_axis, y_axis):
     x_axis = x_axis
     y_axis = y_axis
-    # plt.scatter(x=x_axis, y=y_axis, c=colors_point)
     list = signal.savgol_filter(y_axis,21, 3)
-    plt.plot(x_axis, list)
-    plt.plot(x_axis, y_axis)
     smooth_peaks, _ = signal.find_peaks(x=list)
     main_peaks, _ = signal.find_peaks(x=y_axis)
     negated_list = [-x for x in y_axis]
@@ -66,29 +86,31 @@ def plot_data_frame(x_axis, y_axis):
     np_ay_smooth = np.array(list)
     max_points = top_max_peaks(smooth_peaks, y_axis)
     min_points = top_min_peaks(min_smooth_peaks, y_axis)
-    plt.plot(np_ax_axis[max_points], np_ay_axis[max_points], 'ko', label='Peaks')
-    plt.plot(np_ax_axis[smooth_peaks], np_ay_smooth[smooth_peaks], 'bo', label='Smooth')
-    plt.plot(np_ax_axis[min_smooth_peaks], np_ay_smooth[min_smooth_peaks], 'yo', label='Smooth')
-    plt.plot(np_ax_axis[min_points], np_ay_axis[min_points], 'mo', label='Valleys')
     tag_list = []
     red_list = []
     green_list = []
     flag = True
     signal_list = []
     buy_price = None
+    buy = None
+    row = 0
+    col = 0
     for i in range(len(x_axis)):
         if i in min_points:
             flag = True
             red_list.append(i)
             tag_list.append('B')
-            signal_list.append('B') #completed!
+            signal_list.append('B')
+            buy = x_axis[i]
             buy_price = y_axis[i]
         elif i in max_points:
             green_list.append(i)
             if flag == True:
                 signal_list.append('S')
                 tag_list.append('S')
-            else:                       # completed!
+                if buy != None:
+                    row += 1
+            else:
                 signal_list.append('N')
                 tag_list.append('N')
             flag = False
@@ -110,6 +132,9 @@ def plot_data_frame(x_axis, y_axis):
                             signal_list.append('S/B')
                             tag_list.append('S/B')
                             buy_price = y_axis[i]
+                            row += 1
+                            buy = x_axis[i]
+
                     except:
                         signal_list.append('N')
                         tag_list.append('N')
@@ -117,27 +142,49 @@ def plot_data_frame(x_axis, y_axis):
                 green_list.append(i)
                 signal_list.append('N')
                 tag_list.append('N')
-    plt.plot(np_ax_axis[red_list], np_ay_axis[red_list], 'ro', label='valleys')
-    plt.plot(np_ax_axis[green_list], np_ay_axis[green_list], 'go', label='peaks')
-    plt.xticks(rotation=90)
-    plt.legend()
-    plt.show()
+    ploting(x_axis,y_axis,tag_list)
     return tag_list, signal_list
 
+def write_model(X_train, y_train):
+    rfc = RandomForestClassifier(n_estimators=100, random_state=42)
+    rfc.fit(X_train, y_train)
+    with open('/home/araz-abedini-bakhshmand/Documents/ai/random_forest/model/daily.obj', 'wb') as f:
+      pickle.dump(rfc, f)
 
+def read_model():
+    with open('/home/araz-abedini-bakhshmand/Documents/ai/random_forest/model/daily.obj', 'rb') as f:
+        rfc = pickle.load(f)
+    return rfc
+def train_test(df):
+    X = df.drop(['tag', 'Open', 'High', 'Low', 'id', 'RS'], axis=1)
+    y = df['tag']
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, shuffle=False)
+    return X_train, X_test, y_train, y_test
+
+
+
+def train_model(df,train_length):
+    df = df[:train_length]
+    X_train, X_test, y_train, y_test = train_test(df)
+    rfc = RandomForestClassifier(n_estimators=100, random_state=42)
+    rfc.fit(X_train, y_train)
+    write_model(X_train,y_train)
+
+def test_model(df,train_length):
+    df = df[train_length:]
+    X_train, X_test, y_train, y_test = train_test(df)
+    rf = read_model()
+    y_pred = rf.predict(X_test)
+    print('Model accuracy score with 100 decision-trees : {0:0.4f}'.format(accuracy_score(y_test, y_pred)))
+    return y_pred.tolist()
 
 
 if __name__ == '__main__':
     #df = pd.read_csv(r'/home/araz-abedini-bakhshmand/Documents/ai/test/XAUUSD_candlestick_1D.json', header=None)
     df = pd.read_json(r'/home/araz-abedini-bakhshmand/Documents/ai/test/XAUUSD_candlestick_1D.json',convert_dates=True)
     utility = ut.Utility()
-    # df = utility.title_label(df)
-    # df = utility.delete_char(df, 'change')
-    # df = utility.delete_char(df, 'volume')
-    # df = utility.change_type(data_frame=df)
-
+    df = df.dropna()
     price = utility.make_list(df, 'Close')
-    #date_list = utility.make_list(df, 'date')
     df = utility.alma_calculator(data_frame=df)
     diff_price = diff(price)
     df = df[1:]
@@ -152,46 +199,47 @@ if __name__ == '__main__':
     diff = diff(price)
     tag_list = []
     diff_list = []
-    date_list = utility.make_list(df, 'Open Time')
-    price = price[1:]
-    tag = t.Tag(price)
-    df.drop('Open Time', inplace=True, axis=1)
-    date_list = list(map(str, date_list))
     rsi = utility.make_list(df, 'alma')
-    tag_list = tag.tag_peak()
-    tag_list = tag_list[1:]
     df = df.drop(['Avg Gain'], axis=1)
     df = df.drop(['Gain'], axis=1)
     df = df.drop(['Loss'], axis=1)
     df = df.drop(['Avg Loss'], axis=1)
-    tagg, signal_list = plot_data_frame(date_list, price)
-    tagg = tagg[15:]
-    print(df)
-    df = df[14:]
-    print(df)
-    df['tag'] = tagg
-    process_win_rate = wr.WinRate(decision_list=signal_list, price_list=price)
-    process_win_rate.calculate_win_rate()
-    wind_rate = process_win_rate.win_rate()
-    X = df.drop(['tag', 'open', 'high', 'low'], axis=1)
-    y = df['tag']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0, shuffle=False)
-    rfc = RandomForestClassifier(n_estimators=100, random_state=42)
-    rfc.fit(X_train, y_train)
-    # with open('/home/araz-abedini-bakhshmand/Documents/ai/random forest/model/random_forest.obj', 'wb') as f:
-    #   pickle.dump(rfc, f)
-    with open('/home/araz-abedini-bakhshmand/Documents/ai/random forest/model/random_forest.obj', 'rb') as f:
-        rfc = pickle.load(f)
-    y_pred = rfc.predict(X_test)
-    #print(date_list)
-    date_list = date_list[15:]
-    workbook = xlsxwriter.Workbook('test.xlsx')
-    worksheet = workbook.add_worksheet()
-    row = 0
-    for i in range(len(date_list)):
-        worksheet.write(row, 0, date_list[i])
-        worksheet.write(row, 1, tagg[i])
-        row += 1
-    workbook.close()
-    print('Model accuracy score with 100 decision-trees : {0:0.4f}'.format(accuracy_score(y_test, y_pred)))
-
+    df = df.drop(df[df['RS'] == 'inf'].index)
+    df.dropna(inplace=True)
+    date_list = utility.make_list(df, 'Open Time')
+    df.drop('Open Time', inplace=True, axis=1)
+    date_list = list(map(str, date_list))
+    price = utility.make_list(df, 'Close')
+    x_array = np.array(price)
+    normalized_arr = preprocessing.normalize([x_array])
+    df['Close'] = normalized_arr[0]
+    total_tag, signal_list = plot_data_frame(date_list, price)
+    df['tag'] = total_tag
+    df = df[13:]
+    total_tag = total_tag[13:]
+    train_length = int(len(df) * 0.8)
+    train_model(df, train_length)
+    test_tag = test_model(df, train_length)
+    trained_tag = total_tag[-len(test_tag):]
+    test_price = price[-len(test_tag):]
+    date_list = date_list[-len(test_tag):]
+    win_rate = win_rate_test.compute_win_rate(trained_tag, test_tag)
+    print(win_rate)
+    print(risk_to_reward.risk_reward_compute(test_tag, test_price, date_list))
+    date_list = date_list[-len(test_tag):]
+    print(trained_tag)
+    print(test_tag)
+    print(date_list)
+    func = limit.limit_fuction(test_tag, test_price)
+    print(risk_to_reward.risk_reward_compute(func, test_price, date_list))
+    ploting(date_list, test_price, test_tag)
+    cm = confusion_matrix(trained_tag, test_tag, labels=['B', 'S', 'S/B', 'N'])
+    sns.heatmap(cm,
+                annot=True,
+                fmt='g',
+                xticklabels=['B', 'S', 'S/B', 'N'],
+                yticklabels=['B', 'S', 'S/B', 'N'])
+    plt.ylabel('Prediction', fontsize=13)
+    plt.xlabel('Actual', fontsize=13)
+    plt.title('Confusion Matrix', fontsize=17)
+    plt.show()

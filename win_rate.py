@@ -1,4 +1,4 @@
-
+import pandas as pd
 
 class WinRate:
     def __init__(self, decision_list, price_list):
@@ -32,10 +32,24 @@ class WinRate:
 
 
 
-# if __name__ == '__main__':
-#     price_list = [10, 12, 11, 14, 9, 15, 16, 17, 8]
-#     decision_list = ['B', 'S', 'B', 'S/B', 'S', 'N', 'S', 'B', 'S']
-#     process_win_rate = WinRate(decision_list=decision_list, price_list=price_list)
-#     process_win_rate.calculate_win_rate()
-#     wind_rate = process_win_rate.win_rate()
-#     print(wind_rate)
+if __name__ == '__main__':
+    dataframe = pd.read_excel('Example2.xlsx')
+    dataframe = dataframe[2159:]
+    dataframe.columns = ['date', 'test', 'total']
+    print(dataframe)
+    test = []
+    for index, row in dataframe.iterrows():
+        test.append(row['test'])
+    total = []
+    for index, row in dataframe.iterrows():
+        total.append(row['total'])
+    error = 0
+    count = 0
+    for i in range(len(total)):
+        count += 1
+        if total[i] != test[i]:
+            error += 1
+
+
+    print((count - error) / count)
+
