@@ -1,4 +1,13 @@
 from AlmaIndicator import ALMAIndicator
+from sklearn import preprocessing
+from numpy import diff
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+
+
+
 
 
 class Utility:
@@ -7,10 +16,8 @@ class Utility:
 
     @staticmethod
     def make_list(data_frame, col_name):
-        output = []
-        for index, row in data_frame.iterrows():
-            output.append(row[col_name])
-        return output
+        column_array = data_frame[col_name].to_numpy()
+        return column_array
 
     @staticmethod
     def delete_char(data_frame, col_name):
@@ -70,6 +77,50 @@ class Utility:
 
     @staticmethod
     def alma_calculator(data_frame):
+        print(len(data_frame))
         alma_indicator = ALMAIndicator(close=data_frame['Close'])
-        data_frame['alma'] = alma_indicator.alma()
+        alma = alma_indicator.alma()
+        print(len(alma))
+        data_frame['alma'] = alma
         return data_frame
+
+
+    @staticmethod
+    def normalize_col(col_name, data_frame):
+        x_array = data_frame[col_name].to_numpy()
+        normalized_arr = preprocessing.normalize([x_array])
+        data_frame[col_name] = normalized_arr[0]
+        return data_frame
+
+
+    @staticmethod
+    def calculate_rsi(df, price):
+        diff_price = diff(price)
+        df['Price Change'] = diff_price
+        period_length = 14
+        df['Gain'] = np.where(df['Price Change'] > 0, df['Price Change'], 0)
+        df['Loss'] = np.where(df['Price Change'] < 0, abs(df['Price Change']), 0)
+        df['Avg Gain'] = df['Gain'].rolling(window=period_length).mean()
+        df['Avg Loss'] = df['Loss'].rolling(window=period_length).mean()
+        df['RS'] = df['Avg Gain'] / df['Avg Loss']
+        df['RSI'] = 100 - (100 / (1 + df['RS']))
+        #df = df.drop(['Price Change'], axis=1)
+        df = df.drop(['Avg Gain'], axis=1)
+        df = df.drop(['Gain'], axis=1)
+        df = df.drop(['Loss'], axis=1)
+        df = df.drop(['Avg Loss'], axis=1)
+        df = df.drop(df[df['RS'] == 'inf'].index)
+        return df
+
+    @staticmethod
+    def confusion_matrix(trained_tag, test_tag, labels):
+        cm = confusion_matrix(trained_tag, test_tag, labels=labels)
+        sns.heatmap(cm,
+                    annot=True,
+                    fmt='g',
+                    xticklabels=labels,
+                    yticklabels=labels)
+        plt.ylabel('Actual', fontsize=13)
+        plt.xlabel('Prediction', fontsize=13)
+        plt.title('Confusion Matrix', fontsize=17)
+        plt.show()
