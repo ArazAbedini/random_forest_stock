@@ -104,7 +104,6 @@ class Utility:
         df['Avg Loss'] = df['Loss'].rolling(window=period_length).mean()
         df['RS'] = df['Avg Gain'] / df['Avg Loss']
         df['RSI'] = 100 - (100 / (1 + df['RS']))
-        #df = df.drop(['Price Change'], axis=1)
         df = df.drop(['Avg Gain'], axis=1)
         df = df.drop(['Gain'], axis=1)
         df = df.drop(['Loss'], axis=1)

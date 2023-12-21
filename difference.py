@@ -12,12 +12,18 @@ import numpy as np
 
 
 def extremum_list(y_axis: list) -> np.array:
+
+    negated_list = [-x for x in y_axis]
     peaks, _ = signal.find_peaks(x=y_axis)
-    valleys, _ = signal.find_peaks(x=-1 * y_axis)
+    valleys, _ = signal.find_peaks(x=negated_list)
     arr = np.empty((peaks.size + valleys.size), dtype='i4')
+    print(len(peaks))
+    print(len(valleys))
+    print(len(arr))
     arr[0::2] = valleys[:]
     arr[1::2] = peaks[:]
     return arr
+
 def find_big_difference(y_axis: list) -> tuple:
     arr = extremum_list(y_axis)
     max_inc = np.diff(y_axis[arr]).max()

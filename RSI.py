@@ -1,3 +1,4 @@
+import pandas
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
@@ -8,6 +9,8 @@ from sklearn import preprocessing
 from stoploss import mean_diff_stoploss, end_point
 from regression_torch import regression_train, regression_test
 import matplotlib.pyplot as plt
+# import xgboost as xgb
+from numpy import diff
 from scipy import signal
 import utility as ut
 import win_rate_test
@@ -19,6 +22,12 @@ import pickle
 import limit
 
 
+
+def calculate_accuracy(actual: np.ndarray, predicted: np.ndarray) -> float:
+    correct_predictions = np.sum(actual == predicted)
+    total_predictions = len(actual)
+    accuracy = correct_predictions / total_predictions
+    return accuracy
 
 def ploting(date_list,price, tag_list):
     colors = []
@@ -135,62 +144,57 @@ def plot_data_frame(x_axis, y_axis):
                 signal_list.append('S')
                 tag_list.append('S')
                 just_sell += 1
-    ploting(x_axis, y_axis, tag_list)
-    print('just buy : ', just_buy)
-    print('just sell : ', just_sell)
     return tag_list, signal_list
 
-def write_model(X_train, y_train):
+
+def train_model(df: pd.DataFrame, train_length: int):
+    df_train = df[:train_length]
+    X = df_train.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
+    correlation_matrix = X.corr()
+    print(correlation_matrix)
+    y = df_train['tag']
     rfc = RandomForestClassifier(n_estimators=100, random_state=42)
-    rfc.fit(X_train, y_train)
+    rfc.fit(X, y)
     feature_importance = rfc.feature_importances_
-    importance_df = pd.DataFrame({'Feature': X_train.columns, 'Importance': feature_importance})
+    importance_df = pd.DataFrame({'Feature': X.columns, 'Importance': feature_importance})
     importance_df = importance_df.sort_values(by='Importance', ascending=False)
     print(importance_df)
-    print('opopopopopopopoppopopopopopopopopopopopopopopop')
-    print(X_train, y_train)
+    y_actual = np.array(y)
+    y_predict = rfc.predict(X)
+    accuracy = calculate_accuracy(y_actual, y_predict)
+    print(f"Accuracy: {accuracy * 100:.2f}%")
     with open('/home/araz/Documents/ai/stock/model/daily.obj', 'wb') as f:
-      pickle.dump(rfc, f)
+        pickle.dump(rfc, f)
 
-def read_model():
+def cv_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
+    df_cv_test = df[train_length:]
+    df_cv = df_cv_test[:len(df_cv_test) // 2]
+    X = df_cv.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
+    y_actual = np.array(df_cv['tag'])
+    correlation_matrix = X.corr()
+    print(correlation_matrix)
+    y = np.array(df_cv['tag'])
     with open('/home/araz/Documents/ai/stock/model/daily.obj', 'rb') as f:
         rfc = pickle.load(f)
-    # plt.figure(figsize=(20, 10))
-    # plot_tree(rfc.estimators_[0], filled=True)
-    # plt.savefig("decision_tree.png", dpi=720)
-    # plt.show()
-    return rfc
-def train_test(df):
-    X = df.drop(['tag', 'id', 'RS', 'Price Change', 'High', 'Close', 'Low', 'Open', '26-day EMA'], axis=1)
-    print(X)
-    correlation_matrix = X.corr()
-    print('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq')
-    print(correlation_matrix)
-    y = df['tag']
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.00001, random_state=42, shuffle=False)
-    return X_train, X_test, y_train, y_test
-
-
-
-def train_model(df,train_length):
-    print(train_length)
-    df2 = df[:train_length]
-    print('//////////////////////////////////////////////////////////////////////////////////////')
-    print(df2)
-    X_train, X_test, y_train, y_test = train_test(df2)
-    write_model(X_train, y_train)
-
-def test_model(df,train_length):
-    df = df[train_length:]
-    X = df.drop(['tag', 'id', 'RS', 'Price Change', 'High', 'Close', 'Low', 'Open', '26-day EMA'], axis=1)
-    # X_train, X_test, y_train, y_test = train_test(df)
-    print('???????????????????????????????????????????????????????????????????????????????????????')
-    print(len(df))
-    print(X)
-    rf = read_model()
-    y_pred = rf.predict(X)
-    return y_pred.tolist()
-
+    y_pred = rfc.predict(X)
+    accuracy = calculate_accuracy(y_actual, y_pred)
+    print(f"Accuracy: {accuracy * 100:.2f}%")
+    feature_importance = rfc.feature_importances_
+    importance_df = pd.DataFrame({'Feature': X.columns, 'Importance': feature_importance})
+    importance_df = importance_df.sort_values(by='Importance', ascending=False)
+    print(importance_df)
+    return y_pred
+def test_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
+    df_cv_test = df[train_length:]
+    df_test = df_cv_test[len(df_cv_test) // 2:]
+    X = df_test.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
+    y_actual = df_test['tag']
+    with open('/home/araz/Documents/ai/stock/model/daily.obj', 'rb') as f:
+        rfc = pickle.load(f)
+    y_pred = rfc.predict(X)
+    accuracy = calculate_accuracy(y_actual, y_pred)
+    print(f"Accuracy: {accuracy * 100:.2f}%")
+    return y_pred
 
 def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list, colors: list):
     current_state = None
@@ -247,6 +251,11 @@ def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list
             else:
                 bad += 1
     print('win rate is : ', good / (good + bad))
+    print(len(data['date']))
+    print(len(data['price']))
+    print(len(data['stoploss']))
+    print(len(data['takeprofit']))
+    print(len(data['signal']))
     df = pd.DataFrame(data)
     signals = np.array(df['signal'])
     stolosses = np.array(df['stoploss'])
@@ -306,59 +315,63 @@ def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list
     df.to_excel(excel_file_path, index=False)
 
 
-
-
-
-if __name__ == '__main__':
-    df = pd.read_json(r'/home/araz/Documents/ai/files/XAUUSD_candlestick_1D.json',convert_dates=True)
-    train_length = int(len(df) * 0.8)
-    df_test = df[train_length - 15:]
-    df_test.to_json('data.json', orient='records')
-    utility = ut.Utility()
-    df = df.dropna()
-    price = utility.make_list(df, 'Close')
-    df = utility.alma_calculator(data_frame=df)
-    df = df[1:]
-    df = utility.calculate_rsi(df, price)
-    tag_list = []
-    diff_list = []
-    df.dropna(inplace=True)
-    date_list = utility.make_list(df, 'Open Time')
-    df.drop('Open Time', inplace=True, axis=1)
-    date_list = np.array(list(map(str, date_list)))
-    price = utility.make_list(df, 'Close')
+def feature_add(df: pd.DataFrame) -> pd.DataFrame:
+    alma_indicator = ALMAIndicator(close=df['Close'])
+    alma = alma_indicator.alma()
+    df['alma'] = alma
+    diff_price = diff(price)
+    diff_price = np.insert(diff_price, 0, None)
+    print(diff_price.dtype)
+    df['Price Change'] = diff_price
+    period_length = 14
+    df['Gain'] = np.where(df['Price Change'] > 0, df['Price Change'], 0)
+    df['Loss'] = np.where(df['Price Change'] < 0, abs(df['Price Change']), 0)
+    df['Avg Gain'] = df['Gain'].rolling(window=period_length).mean()
+    df['Avg Loss'] = df['Loss'].rolling(window=period_length).mean()
+    df['RS'] = df['Avg Gain'] / df['Avg Loss']
+    df['RSI'] = 100 - (100 / (1 + df['RS']))
+    df = df.drop(['Avg Gain'], axis=1)
+    df = df.drop(['Gain'], axis=1)
+    df = df.drop(['Loss'], axis=1)
+    df = df.drop(['Avg Loss'], axis=1)
+    df = df.drop(df[df['RS'] == 'inf'].index)
     df['12-day EMA'] = df['Close'].ewm(span=12, adjust=False).mean()
     df['26-day EMA'] = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD Line'] = df['12-day EMA'] - df['26-day EMA']
     df['Signal Line'] = df['MACD Line'].ewm(span=9, adjust=False).mean()
     df['MACD Histogram'] = df['MACD Line'] - df['Signal Line']
+    df.dropna(axis=1, inplace=True)
+    return df
+
+
+if __name__ == '__main__':
+    df = pd.read_json(r'/home/araz/Documents/ai/files/XAUUSD_candlestick_1D.json',convert_dates=True)
+    train_length = int(len(df) * 0.6)
+    df_cross_test = df[train_length - 15:]
+    cross_test_length = len(df_cross_test)
+    df_cross_val = df_cross_test[:cross_test_length]
+    df_test = df_cross_test[cross_test_length:]
+    utility = ut.Utility()
+    price = df['Close']
+    df = feature_add(df)
+    date_list = np.array(df['Open Time'])
+    date_list = np.array(list(map(str, date_list)))
     total_tag, signal_list = plot_data_frame(date_list, price)
     df['tag'] = total_tag
-    print(df)
-    y = np.array(df['Close'][1:])
-    X = df.drop(['id', 'tag'], axis='columns')[:-1]
-    print(X)
-    print('./././././././././././././././././././././././.')
-    X_train = X
-    y_train = y
-    regression_train()
-    print(total_tag)
-    test_tag1 = total_tag[train_length:]
     train_model(df, train_length)
+    cv_tag = cv_model(df, train_length)
     test_tag = test_model(df, train_length)
-    trained_tag = total_tag[-len(test_tag):]
-    test_price = price[-len(test_tag):]
-    test_date_list = date_list[-len(test_tag):]
     price_arr = np.array(price)
     stoploss_arr = end_point(price, total_tag)
     stoploss_diff = stoploss_arr - price_arr
+    print('length of stoploss arr is : ', len(stoploss_arr))
     take_profit_arr = 2 * -1 * stoploss_diff + price_arr
-    print('stoploss array is : ', stoploss_arr)
-    print('take profit arr is : ', take_profit_arr)
-    ploting(test_date_list, test_price, test_tag)
-    utility.confusion_matrix(trained_tag, test_tag, ['B', 'S'])
+    prediction_tag = np.concatenate((cv_tag, test_tag))
+    print(len(prediction_tag))
+    print(len(cv_tag))
+    utility.confusion_matrix(df[train_length:]['tag'], prediction_tag, ['B', 'S'])
     colors = []
-    for index in test_tag:
+    for index in prediction_tag:
         if index == 'B':
             colors.append('green')
         elif index == 'S':
@@ -367,19 +380,14 @@ if __name__ == '__main__':
             colors.append('orange')
         else:
             colors.append('black')
-    plt.plot(test_date_list, test_price)
-    plt.scatter(test_date_list, test_price, c=colors)
-    plt.xticks(rotation=90)
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.title('total labeling')
-    stoploss_arr = end_point(test_price, test_tag)
-    stoploss_diff = stoploss_arr - test_price
-    take_profit_arr = 2 * -1 * stoploss_diff + test_price
-    print('stoploss array is : ', stoploss_arr)
-    print('take profit arr is : ', take_profit_arr)
-    plt.plot(test_date_list, stoploss_arr)
-    plt.plot(test_date_list, take_profit_arr)
+    prediction_price = df[train_length:]['Close']
+    prediction_date = df[train_length:]['Open Time']
+    stoploss_arr = end_point(list(prediction_price), list(prediction_tag))
+    stoploss_diff = stoploss_arr - prediction_price
+    take_profit_arr = 2 * -1 * stoploss_diff + prediction_price
+    plt.plot(prediction_date, stoploss_arr)
+    plt.plot(prediction_date, take_profit_arr)
     plt.show()
-    excel_write(test_date_list, test_price, take_profit_arr[-len(test_tag):], stoploss_arr[-len(test_tag):], colors)
-    
+    print('length of take profit arr is : ', len(take_profit_arr))
+    print('length of predction date is : ', len(prediction_date))
+    excel_write(list(prediction_date), list(prediction_price), list(take_profit_arr), list(stoploss_arr), colors)

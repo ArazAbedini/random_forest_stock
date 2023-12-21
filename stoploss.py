@@ -56,7 +56,7 @@ def end_point(price: list, tag: list) -> float:
     print(long_indices)
     print(short_indices)
     stoploss = []
-    mean_value = mean_diff_stoploss(price)
+    mean_value = mean_diff_stoploss(list(price))
     k = 0
     j = 0
     long_last_index = long_indices[k]
