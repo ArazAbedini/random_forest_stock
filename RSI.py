@@ -4,12 +4,21 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import accuracy_score
 from AlmaIndicator import ALMAIndicator
+from torch.utils.data import DataLoader, TensorDataset
+
 from difference import mean_calculate, cut_signal, find_small_difference, find_big_difference
 from sklearn import preprocessing
 from stoploss import mean_diff_stoploss, end_point
 from regression_torch import regression_train, regression_test
 import matplotlib.pyplot as plt
-# import xgboost as xgb
+import torch.nn as nn
+from regression_model import RegressionModel
+import torch.optim as optim
+
+import xgboost as xgb
+import torch
+from xgboost import XGBClassifier
+from sklearn.preprocessing import LabelEncoder
 from numpy import diff
 from scipy import signal
 import utility as ut
@@ -32,9 +41,9 @@ def calculate_accuracy(actual: np.ndarray, predicted: np.ndarray) -> float:
 def ploting(date_list,price, tag_list):
     colors = []
     for index in tag_list:
-        if index == 'B':
+        if index == 0:
             colors.append('green')
-        elif index == 'S':
+        elif index == 1:
             colors.append('red')
         elif index == 'S/B':
             colors.append('orange')
@@ -47,6 +56,36 @@ def ploting(date_list,price, tag_list):
     plt.ylabel('Y')
     plt.title('total labeling')
     plt.show()
+
+def torch_train(df: pd.DataFrame, train_length: int):
+    seed = 42
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    df = df[:train_length]
+    X = df[['Open', 'High', 'Low', 'Close']][:-1]
+    y = df['Close'][1:]
+    input_size = 4
+    hidden_size = 64
+    output_size = 1
+    num_epochs = 100
+    batch_size = 32
+    model = RegressionModel(input_size, hidden_size, output_size)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    train_dataset = TensorDataset(X, y)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    for epoch in range(num_epochs):
+        for batch_X, batch_y in train_loader:
+            optimizer.zero_grad()
+            outputs = model(batch_X)
+            loss = criterion(outputs, batch_y)
+            loss.backward()
+            optimizer.step()
+        print(f'Epoch {epoch + 1}/{num_epochs}, Loss: {loss.item()}')
+    with open('/home/araz/Documents/ai/stock/model/regression_model.obj', 'wb') as f:
+        pickle.dump(model, f)
+
+
 def top_max_peaks(smooth_peaks, y_axis):
     start_point = 0
     max_points = []
@@ -79,10 +118,12 @@ def top_min_peaks(smooth_peaks, y_axis):
 
 
 def plot_data_frame(x_axis, y_axis):
-    print('y_axis : ', y_axis)
+    print('length of y_axis is : ', len(y_axis))
     x_axis = x_axis.tolist()
     y_axis = y_axis.tolist()
-    list = signal.savgol_filter(y_axis,21, 3)
+    fig, ax = plt.subplots()
+    list = signal.savgol_filter(y_axis, 30, 3)
+    ax.plot(x_axis, list)
     smooth_peaks, _ = signal.find_peaks(x=list)
     main_peaks, _ = signal.find_peaks(x=y_axis)
     negated_list = [-x for x in y_axis]
@@ -91,6 +132,8 @@ def plot_data_frame(x_axis, y_axis):
     min_smooth_peaks, _ = signal.find_peaks(x=negated_smooth_list)
     max_points = top_max_peaks(smooth_peaks, y_axis)
     min_points = top_min_peaks(min_smooth_peaks, y_axis)
+    ax.scatter(min_points, np.array(list)[min_points], color='purple')
+    ax.scatter(max_points, np.array(list)[max_points], color='blue')
     tag_list = []
     red_list = []
     green_list = []
@@ -105,15 +148,15 @@ def plot_data_frame(x_axis, y_axis):
         if i in min_points:
             flag = True
             red_list.append(i)
-            tag_list.append('B')
-            signal_list.append('B')
+            tag_list.append(0)
+            signal_list.append(0)
             buy = x_axis[i]
             buy_price = y_axis[i]
             just_buy += 1
         elif i in max_points:
             green_list.append(i)
-            signal_list.append('S')
-            tag_list.append('S')
+            signal_list.append(1)
+            tag_list.append(1)
             just_sell += 1
             if buy != None:
                 row += 1
@@ -125,64 +168,100 @@ def plot_data_frame(x_axis, y_axis):
                 try:
                     risk_reward = (0.95 * buy_price) / (y_axis[i] - buy_price)
                     if risk_reward < 1.5:
-                        signal_list.append('B')
-                        tag_list.append('B')
+                        signal_list.append(0)
+                        tag_list.append(0)
                         just_buy += 1
                     else:
-                        signal_list.append('B')
-                        tag_list.append('B')
+                        signal_list.append(0)
+                        tag_list.append(0)
                         buy_price = y_axis[i]
                         row += 1
                         buy = x_axis[i]
                         just_buy += 1
                 except:
-                    signal_list.append('B')
-                    tag_list.append('B')
+                    signal_list.append(0)
+                    tag_list.append(0)
                     just_buy += 1
             else:
                 green_list.append(i)
-                signal_list.append('S')
-                tag_list.append('S')
+                signal_list.append(1)
+                tag_list.append(1)
                 just_sell += 1
+
+    print(np.where(np.array(tag_list) == 1)[0])
+    y_axis_arr = np.array(y_axis)
+    green = y_axis_arr[np.where(np.array(tag_list) == 1)[0].astype(int)]
+    red = y_axis_arr[np.where(np.array(tag_list) == 0)[0].astype(int)]
+    print('length of green list is : ', len(green_list))
+    print('length of green-y is : ', len(green))
+    print('length of red list is : ', len(red_list))
+    print('length of red-y is : ', len(red))
+    ax.scatter(green_list, green, color='green', label='green')
+    ax.scatter(red_list, red, color='red', label='red')
+    ax.plot(x_axis, y_axis)
+    plt.xlabel('index')
+    plt.xticks(rotation=90)
+    plt.ylabel('value')
+    plt.title('price')
+    plt.legend()
+    plt.show()
     return tag_list, signal_list
 
 
 def train_model(df: pd.DataFrame, train_length: int):
     df_train = df[:train_length]
+    df_train = torch_train(df, train_length + 1)
     X = df_train.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
     correlation_matrix = X.corr()
-    print(correlation_matrix)
+    # print(correlation_matrix)
     y = df_train['tag']
-    rfc = RandomForestClassifier(n_estimators=100, random_state=42)
-    rfc.fit(X, y)
-    feature_importance = rfc.feature_importances_
+    # rfc = RandomForestClassifier(n_estimators=100, random_state=42)
+    # rfc.fit(X, y)
+    xgb_model = XGBClassifier(
+        objective='multi:softmax',  # for multi-class classification
+        num_class=len(np.unique(y)),
+        max_depth=3,
+        learning_rate=0.1,
+        subsample=0.7,
+        colsample_bytree=0.7,
+        n_estimators=100,
+        random_state=42
+    )
+
+    # Train the XGBoost model
+    # label_encoder = LabelEncoder()
+    # y_encoded = label_encoder.fit_transform(y)
+    xgb_model.fit(X, y)
+    # feature_importance = rfc.feature_importances_
+    feature_importance = xgb_model.feature_importances_
     importance_df = pd.DataFrame({'Feature': X.columns, 'Importance': feature_importance})
     importance_df = importance_df.sort_values(by='Importance', ascending=False)
-    print(importance_df)
+    # print(importance_df)
     y_actual = np.array(y)
-    y_predict = rfc.predict(X)
+    # y_predict = rfc.predict(X)
+    y_predict = xgb_model.predict(X)
     accuracy = calculate_accuracy(y_actual, y_predict)
-    print(f"Accuracy: {accuracy * 100:.2f}%")
+    print(f"Accuracy of train model : {accuracy * 100:.2f}%")
     with open('/home/araz/Documents/ai/stock/model/daily.obj', 'wb') as f:
-        pickle.dump(rfc, f)
-
+        # pickle.dump(rfc, f)
+        pickle.dump(xgb_model, f)
 def cv_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
     df_cv_test = df[train_length:]
     df_cv = df_cv_test[:len(df_cv_test) // 2]
     X = df_cv.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
     y_actual = np.array(df_cv['tag'])
     correlation_matrix = X.corr()
-    print(correlation_matrix)
+    # print(correlation_matrix)
     y = np.array(df_cv['tag'])
     with open('/home/araz/Documents/ai/stock/model/daily.obj', 'rb') as f:
         rfc = pickle.load(f)
     y_pred = rfc.predict(X)
     accuracy = calculate_accuracy(y_actual, y_pred)
-    print(f"Accuracy: {accuracy * 100:.2f}%")
+    print(f"Accuracy of cv model : {accuracy * 100:.2f}%")
     feature_importance = rfc.feature_importances_
     importance_df = pd.DataFrame({'Feature': X.columns, 'Importance': feature_importance})
     importance_df = importance_df.sort_values(by='Importance', ascending=False)
-    print(importance_df)
+    # print(importance_df)
     return y_pred
 def test_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
     df_cv_test = df[train_length:]
@@ -193,7 +272,7 @@ def test_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
         rfc = pickle.load(f)
     y_pred = rfc.predict(X)
     accuracy = calculate_accuracy(y_actual, y_pred)
-    print(f"Accuracy: {accuracy * 100:.2f}%")
+    print(f"Accuracy of test mode is : {accuracy * 100:.2f}%")
     return y_pred
 
 def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list, colors: list):
@@ -250,12 +329,7 @@ def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list
                 good += 1
             else:
                 bad += 1
-    print('win rate is : ', good / (good + bad))
-    print(len(data['date']))
-    print(len(data['price']))
-    print(len(data['stoploss']))
-    print(len(data['takeprofit']))
-    print(len(data['signal']))
+    print('win rate of is : ', good / (good + bad))
     df = pd.DataFrame(data)
     signals = np.array(df['signal'])
     stolosses = np.array(df['stoploss'])
@@ -344,6 +418,7 @@ def feature_add(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+
 if __name__ == '__main__':
     df = pd.read_json(r'/home/araz/Documents/ai/files/XAUUSD_candlestick_1D.json',convert_dates=True)
     train_length = int(len(df) * 0.6)
@@ -369,15 +444,13 @@ if __name__ == '__main__':
     prediction_tag = np.concatenate((cv_tag, test_tag))
     print(len(prediction_tag))
     print(len(cv_tag))
-    utility.confusion_matrix(df[train_length:]['tag'], prediction_tag, ['B', 'S'])
+    utility.confusion_matrix(df[train_length:]['tag'], prediction_tag, [0, 1])
     colors = []
     for index in prediction_tag:
-        if index == 'B':
+        if index == 0:
             colors.append('green')
-        elif index == 'S':
+        elif index == 1:
             colors.append('red')
-        elif index == 'S/B':
-            colors.append('orange')
         else:
             colors.append('black')
     prediction_price = df[train_length:]['Close']
