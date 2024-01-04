@@ -212,6 +212,7 @@ def train_model(df: pd.DataFrame, train_length: int):
     df_train = df[:train_length]
     df_train = torch_train(df, train_length + 1)
     X = df_train.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
+    print(X.info())
     correlation_matrix = X.corr()
     # print(correlation_matrix)
     y = df_train['tag']
@@ -433,6 +434,7 @@ if __name__ == '__main__':
     date_list = np.array(list(map(str, date_list)))
     total_tag, signal_list = plot_data_frame(date_list, price)
     df['tag'] = total_tag
+    print(df.info())
     train_model(df, train_length)
     cv_tag = cv_model(df, train_length)
     test_tag = test_model(df, train_length)
