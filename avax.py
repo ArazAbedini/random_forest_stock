@@ -1,6 +1,8 @@
 from statsmodels.tsa.seasonal import STL
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
+from stoploss import end_point
+from RSI import excel_write
 from scipy import signal
 import pandas as pd
 import numpy as np
@@ -11,10 +13,10 @@ import ast
 
 def add_date_feature(df: pd.DataFrame) -> pd.DataFrame:
     time = np.array(df['open_time'])
-    day_array = np.zeros(len(time), dtype=np.int8)
-    month_array = np.zeros(len(time), dtype=np.int8)
-    year_array = np.zeros(len(time), dtype=np.int8)
-    hour_array = np.zeros(len(time), dtype=np.int8)
+    day_array = np.zeros(len(time), dtype=np.int16)
+    month_array = np.zeros(len(time), dtype=np.int16)
+    year_array = np.zeros(len(time), dtype=np.int16)
+    hour_array = np.zeros(len(time), dtype=np.int16)
     for i in range(len(time)):
         time_list = time[i].split(' ')
         date_list = time_list[0].split('-')
@@ -29,6 +31,7 @@ def add_date_feature(df: pd.DataFrame) -> pd.DataFrame:
         'day': day_array,
         'hour': hour_array
     })
+
     df_result = pd.concat([df, feature_df], axis='columns')
     return df_result
 
@@ -121,9 +124,8 @@ if __name__ == '__main__':
     df['label'] = label
     columns_list = ['open', 'close', 'high', 'low', 'volume']
     df[columns_list] = df[columns_list].astype(np.float32)
-    X = df.drop(['id', 'open_time', 'time_frame', 'exchange', 'symbol'], axis='columns')[:-1]
+    X = df.drop(['id', 'open_time', 'time_frame', 'exchange', 'symbol', 'label'], axis='columns')[:-1]
     y = df['label'][1:]
-    print(type(y))
     train_size = int(0.6 * len(X))
     cv_size = int(0.8 * len(X))
     train_model(X[:train_size], y[:train_size])
@@ -133,3 +135,71 @@ if __name__ == '__main__':
     y_cv_actual = y[train_size:cv_size]
     accuracy = calculate_accuracy(y_cv_actual, y_cv_predict)
     print(f"Accuracy of train model : {accuracy * 100:.2f}%")
+    x_test = X[cv_size:]
+    y_test_predict = rfc.predict(x_test)
+    y_test_actual = y[cv_size:]
+    accuracy = calculate_accuracy(y_test_actual, y_test_predict)
+    print(f"Accuracy of train model : {accuracy * 100:.2f}%")
+    date_excel = np.array(open_time[cv_size:-1])
+    close_excel = np.array(x_test['close'])
+    stoploss_arr = end_point(list(close_excel), list(y_test_predict))
+    stoploss_diff = stoploss_arr - close_excel
+    take_profit_arr = 2 * -1 * stoploss_diff + close_excel
+    colors = []
+    for item in y_test_predict:
+        if item == 0:
+            colors.append('green')
+        elif item == 1:
+            colors.append('red')
+        else:
+            colors.append('black')
+
+
+    excel_write(list(date_excel), list(close_excel), list(take_profit_arr), list(stoploss_arr), list(colors), name='avax_daily.xlsx')
+    # day_array = np.full(len(close_excel), None, dtype=object)
+    # state_array = np.full(len(close_excel), 'undifined', dtype=object)
+    # end_price = np.zeros(len(close_excel), dtype=np.int16)
+    # for i in range(len(close_excel)):
+    #     state = y_test_predict[i]
+    #     for j in range(i + 1, len(close_excel)):
+    #         if close_excel[j] <= stoploss_arr[i] and state == 0:
+    #             day_array[i] = date_excel[j]
+    #             end_price[i] = close_excel[j]
+    #             state_array[i] = 'fail'
+    #             break
+    #         elif close_excel[j] >= take_profit_arr[i] and state == 0:
+    #             day_array[i] = date_excel[j]
+    #             state_array[i] = 'successful'
+    #             end_price[i] = close_excel[j]
+    #             break
+    #         elif close_excel[j] <= take_profit_arr[i] and state == 1:
+    #             day_array[i] = date_excel[j]
+    #             state_array[i] = 'successful'
+    #             end_price[i] = close_excel[j]
+    #             break
+    #         elif close_excel[j] >= stoploss_arr[i] and state == 1:
+    #             day_array[i] = date_excel[j]
+    #             end_price[i] = close_excel[j]
+    #             state_array[i] = 'fail'
+    #             break
+    #
+    # data = {
+    #     'time': date_excel,
+    #     'close': close_excel,
+    #     'take profit': take_profit_arr,
+    #     'stoploss': stoploss_arr,
+    #     'signal': y_test_predict,
+    #     'end time': day_array,
+    #     'end price': end_price,
+    #     'state': state_array
+    # }
+    # df = pd.DataFrame(data)
+    # df.to_excel('avax.xlsx', index=False)
+    # success = 0
+    # fail = 0
+    # for state in state_array:
+    #     if state == 'successful':
+    #         success += 1
+    #     elif state == 'fail':
+    #         fail += 1
+    # print(success / len(state_array))

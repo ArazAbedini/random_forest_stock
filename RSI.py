@@ -210,7 +210,7 @@ def plot_data_frame(x_axis, y_axis):
 
 def train_model(df: pd.DataFrame, train_length: int):
     df_train = df[:train_length]
-    df_train = torch_train(df, train_length + 1)
+    # df_train = torch_train(df, train_length + 1)
     X = df_train.drop(['tag', 'id', 'Open Time', 'Close', 'High', 'Low', 'Open', '26-day EMA'], axis='columns')
     print(X.info())
     correlation_matrix = X.corr()
@@ -276,7 +276,7 @@ def test_model(df: pd.DataFrame, train_length: int) -> np.ndarray:
     print(f"Accuracy of test mode is : {accuracy * 100:.2f}%")
     return y_pred
 
-def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list, colors: list):
+def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list, colors: list, name: str):
     current_state = None
     state_list = []
     # colors_diff = np.diff(np.array(colors))
@@ -369,13 +369,13 @@ def excel_write(date_list: list, price: list, take_profit: list, stop_loss: list
             end_time.append(' ')
             end_condition.append(' ')
             end_price.append(' ')
-    # end_time.append(' ')
-    # end_condition.append(' ')
-    # end_price.append(' ')
+    end_time.append(' ')
+    end_condition.append(' ')
+    end_price.append(' ')
     df['endTime'] = end_time
     df['endCondition'] = end_condition
     df['endPrice'] = end_price
-    excel_file_path = 'daily.xlsx'
+    excel_file_path = name
     good = 0
     bad = 0
     for i in range(len(end_condition)):
@@ -465,4 +465,4 @@ if __name__ == '__main__':
     plt.show()
     print('length of take profit arr is : ', len(take_profit_arr))
     print('length of predction date is : ', len(prediction_date))
-    excel_write(list(prediction_date), list(prediction_price), list(take_profit_arr), list(stoploss_arr), colors)
+    excel_write(list(prediction_date), list(prediction_price), list(take_profit_arr), list(stoploss_arr), colors, 'forex_daily.xlsx')
